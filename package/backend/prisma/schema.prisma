@@ -1,0 +1,92 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/* ---------- Enums ---------- */
+enum EnumTermLinkType {
+  SEE
+  SEE_ALSO
+}
+
+/* ---------- Models ---------- */
+model User {
+  id          String   @id @default(uuid())
+  displayName String?
+  email       String?
+  terms       Term[]   @relation("UserTerms")
+}
+
+model Category {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  slug      String    @unique
+  parentId  String?
+  parent    Category? @relation("CategoryParent", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryParent")
+  terms     Term[]
+}
+
+/* Term 本体 */
+model Term {
+  id               String   @id @default(uuid())
+  title            String   @db.VarChar(256)
+  slug             String   @unique
+  language         String   @default("ja")
+  kanaReading      String
+  initialLetter    String
+  subGroup         String?
+  markdownPath     String
+  htmlPath         String
+  markdownContent  String
+  htmlContent      String
+  searchVector     String?   @db.TsVector
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  authorId   String
+  author     User      @relation("UserTerms", fields: [authorId], references: [id])
+
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id])
+
+  /* Self‑referencing links */
+  seeLinks        TermSeeLink[] @relation("SourceTerm")
+  seenByLinks     TermSeeLink[] @relation("TargetTerm")
+
+  histories       TermHistory[]
+}
+
+/* Link table (many‑to‑many with type) */
+model TermSeeLink {
+  sourceId String
+  targetId String
+  type     EnumTermLinkType
+
+  source Term @relation("SourceTerm", fields: [sourceId], references: [id])
+  target Term @relation("TargetTerm", fields: [targetId], references: [id])
+
+  @@id([sourceId, targetId, type])
+}
+
+/* History (バージョン管理) */
+model TermHistory {
+  id               String   @id @default(uuid())
+  termId           String
+  term             Term     @relation(fields: [termId], references: [id])
+  markdownContent  String
+  htmlContent      String
+  createdAt        DateTime @default(now())
+  authorId         String
+  author           User     @relation(fields: [authorId], references: [id])
+}
+
+/* ---------- Full‑text search trigger ----------
+   We use a BEFORE INSERT OR UPDATE trigger to keep `searchVector` up‑to‑date.
+*/
+@@index([searchVector], type: GIN)
+
