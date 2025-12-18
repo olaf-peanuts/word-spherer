@@ -1,0 +1,81 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum EnumTermLinkType {
+  SEE
+  SEE_ALSO
+}
+
+model User {
+  id          String   @id @default(uuid())
+  displayName String?
+  email       String?
+  terms       Term[]   @relation("UserTerms")
+  histories   TermHistory[]
+}
+
+model Category {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  slug      String    @unique
+  parentId  String?
+  parent    Category? @relation("CategoryParent", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryParent")
+  terms     Term[]
+}
+
+model Term {
+  id               String   @id @default(uuid())
+  title            String   @db.VarChar(256)
+  slug             String   @unique
+  language         String   @default("ja")
+  kanaReading      String
+  initialLetter    String
+  subGroup         String?
+  markdownPath     String
+  htmlPath         String
+  markdownContent  String
+  htmlContent      String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  authorId   String
+  author     User      @relation("UserTerms", fields: [authorId], references: [id])
+
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id])
+
+  seeLinks        TermSeeLink[] @relation("SourceTerm")
+  seenByLinks     TermSeeLink[] @relation("TargetTerm")
+  histories       TermHistory[]
+}
+
+model TermSeeLink {
+  sourceId String
+  targetId String
+  type     EnumTermLinkType
+
+  source Term @relation("SourceTerm", fields: [sourceId], references: [id])
+  target Term @relation("TargetTerm", fields: [targetId], references: [id])
+
+  @@id([sourceId, targetId, type])
+}
+
+model TermHistory {
+  id               String   @id @default(uuid())
+  termId           String
+  term             Term     @relation(fields: [termId], references: [id])
+  markdownContent  String
+  htmlContent      String
+  createdAt        DateTime @default(now())
+  authorId         String
+  author           User     @relation(fields: [authorId], references: [id])
+}
+
